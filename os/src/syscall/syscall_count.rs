@@ -1,6 +1,6 @@
-use lazy_static::*;
-use crate::sync::UPSafeCell;
 use crate::config::MAX_SYSCALL_NUM;
+use crate::sync::UPSafeCell;
+use lazy_static::*;
 
 pub struct SyscallCount {
     inner: UPSafeCell<SyscallCountInner>,
@@ -11,15 +11,10 @@ pub struct SyscallCountInner {
 }
 
 lazy_static! {
-    /// Global variable: TASK_MANAGER
     pub static ref SYSCALL_COUNT: SyscallCount = {
         let count = [0; MAX_SYSCALL_NUM];
         SyscallCount {
-            inner: unsafe {
-                UPSafeCell::new(SyscallCountInner {
-                    count,
-                })
-            },
+            inner: unsafe { UPSafeCell::new(SyscallCountInner { count }) },
         }
     };
 }
@@ -30,7 +25,7 @@ impl SyscallCount {
         inner.count[syscall_id] += 1;
     }
 
-    fn count_get(&self, syscall_id: usize) -> u32{
+    fn count_get(&self, syscall_id: usize) -> u32 {
         let inner = self.inner.exclusive_access();
         inner.count[syscall_id]
     }
