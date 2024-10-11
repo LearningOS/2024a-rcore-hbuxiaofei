@@ -1,9 +1,12 @@
 //! Process management syscalls
 use crate::{
     config::MAX_SYSCALL_NUM,
+    mm::translated_byte_buffer,
     task::{
-        change_program_brk, exit_current_and_run_next, suspend_current_and_run_next, TaskStatus,
+        change_program_brk, current_user_token, exit_current_and_run_next, get_current_status,
+        get_current_syscall_times, get_current_time, suspend_current_and_run_next, TaskStatus,
     },
+    timer::get_time_us,
 };
 
 #[repr(C)]
@@ -38,20 +41,53 @@ pub fn sys_yield() -> isize {
     0
 }
 
+/// Copy memory from kernel space to user space
+fn copy_to_user(dst: *mut u8, src: *const u8, len: usize) {
+    let s: &[u8] = unsafe { core::slice::from_raw_parts(src, len) };
+    let buffers = translated_byte_buffer(current_user_token(), dst, len);
+    let mut start = 0;
+    for buffer in buffers {
+        let end = start + buffer.len();
+        buffer.copy_from_slice(&s[start..end]);
+        start = end;
+    }
+}
+
 /// YOUR JOB: get time with second and microsecond
 /// HINT: You might reimplement it with virtual memory management.
 /// HINT: What if [`TimeVal`] is splitted by two pages ?
-pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
+pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
     trace!("kernel: sys_get_time");
-    -1
+    let us = get_time_us();
+    let tv = TimeVal {
+        sec: us / 1_000_000,
+        usec: us % 1_000_000,
+    };
+    let len = core::mem::size_of::<TimeVal>();
+    let s: &[u8] = unsafe { core::slice::from_raw_parts(&tv as *const TimeVal as *const u8, len) };
+    copy_to_user(ts as *mut u8, s.as_ptr(), len);
+    0
 }
 
 /// YOUR JOB: Finish sys_task_info to pass testcases
 /// HINT: You might reimplement it with virtual memory management.
 /// HINT: What if [`TaskInfo`] is splitted by two pages ?
-pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
+pub fn sys_task_info(ti: *mut TaskInfo) -> isize {
     trace!("kernel: sys_task_info NOT IMPLEMENTED YET!");
-    -1
+    let mut syscall_times = [0; MAX_SYSCALL_NUM];
+    for i in 0..syscall_times.len() {
+        syscall_times[i] = get_current_syscall_times(i);
+    }
+    let info = TaskInfo {
+        status: get_current_status(),
+        syscall_times,
+        time: get_current_time(),
+    };
+    let len = core::mem::size_of::<TaskInfo>();
+    let s: &[u8] =
+        unsafe { core::slice::from_raw_parts(&info as *const TaskInfo as *const u8, len) };
+    copy_to_user(ti as *mut u8, s.as_ptr(), len);
+    0
 }
 
 // YOUR JOB: Implement mmap.
