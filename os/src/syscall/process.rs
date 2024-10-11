@@ -2,7 +2,7 @@
 use crate::{
     config::MAX_SYSCALL_NUM,
     task::{
-        exit_current_and_run_next, get_current_status, get_current_syscall_times,
+        exit_current_and_run_next, get_current_status, get_current_time, get_current_syscall_times,
         suspend_current_and_run_next, TaskStatus,
     },
     timer::get_time_us,
@@ -57,7 +57,7 @@ pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
 pub fn sys_task_info(ti: *mut TaskInfo) -> isize {
     trace!("kernel: sys_task_info");
     unsafe {
-        (*ti).time += get_time_us();
+        (*ti).time = get_current_time();
         (*ti).status = get_current_status();
         let syscall_times = &mut (*ti).syscall_times;
         for i in 0..syscall_times.len() {
