@@ -2,7 +2,7 @@
 use crate::{
     config::MAX_SYSCALL_NUM,
     task::{
-        exit_current_and_run_next, get_current_status, get_current_time, get_current_syscall_times,
+        exit_current_and_run_next, get_current_status, get_current_syscall_times, get_current_time,
         suspend_current_and_run_next, TaskStatus,
     },
     timer::get_time_us,
