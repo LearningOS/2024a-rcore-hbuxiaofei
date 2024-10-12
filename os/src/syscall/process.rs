@@ -1,10 +1,10 @@
 //! Process management syscalls
 use crate::{
     config::{MAX_SYSCALL_NUM, PAGE_SIZE},
-    mm::{translated_byte_buffer, VirtAddr},
+    mm::{translated_byte_buffer, VirtAddr, MapPermission},
     task::{
         change_program_brk, current_user_token, exit_current_and_run_next, get_current_status,
-        get_current_syscall_times, get_current_time, suspend_current_and_run_next, TaskStatus,
+        get_current_syscall_times, get_current_time, suspend_current_and_run_next, map_current, TaskStatus,
     },
     timer::get_time_us,
 };
@@ -98,14 +98,19 @@ fn align_up_pagesize(x: usize) -> usize {
 // YOUR JOB: Implement mmap.
 pub fn sys_mmap(start: usize, len: usize, port: usize) -> isize {
     trace!("kernel: sys_mmap NOT IMPLEMENTED YET!");
-    let va = VirtAddr(start);
-    if !va.aligned() {
+    let start_va = VirtAddr(start);
+    if !start_va.aligned() {
         return -1;
     }
     if port & !0x7 != 0 || port & 0x7 == 0 {
         return -1;
     }
-    let _len = align_up_pagesize(len) as isize;
+    let end_va = VirtAddr(start + align_up_pagesize(len));
+
+
+    let permission = MapPermission::R | MapPermission::W;
+
+    map_current(start_va, end_va, permission);
 
     0
 }

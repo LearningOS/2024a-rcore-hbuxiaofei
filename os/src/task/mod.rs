@@ -19,6 +19,7 @@ use crate::loader::{get_app_data, get_num_app};
 use crate::sync::UPSafeCell;
 use crate::timer::get_time_ms;
 use crate::trap::TrapContext;
+use crate::mm::{VirtAddr, MapPermission};
 use alloc::vec::Vec;
 use lazy_static::*;
 use switch::__switch;
@@ -190,6 +191,12 @@ impl TaskManager {
         let current = inner.current_task;
         get_time_ms() - inner.tasks[current].start_time
     }
+
+    fn map_current(&self, start_va: VirtAddr, end_va: VirtAddr, permission: MapPermission) {
+        let mut inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        inner.tasks[current].memory_set.insert_framed_area(start_va, end_va, permission)
+    }
 }
 
 /// Run the first task in task list.
@@ -258,4 +265,9 @@ pub fn get_current_status() -> TaskStatus {
 /// Get time of current task
 pub fn get_current_time() -> usize {
     TASK_MANAGER.get_current_time()
+}
+
+/// Map memory for current task
+pub fn map_current(start_va: VirtAddr, end_va: VirtAddr, permission: MapPermission) {
+    TASK_MANAGER.map_current(start_va, end_va, permission)
 }
