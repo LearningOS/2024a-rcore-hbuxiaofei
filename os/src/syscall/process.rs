@@ -1,7 +1,7 @@
 //! Process management syscalls
 use crate::{
-    config::MAX_SYSCALL_NUM,
-    mm::translated_byte_buffer,
+    config::{MAX_SYSCALL_NUM, PAGE_SIZE},
+    mm::{translated_byte_buffer, VirtAddr},
     task::{
         change_program_brk, current_user_token, exit_current_and_run_next, get_current_status,
         get_current_syscall_times, get_current_time, suspend_current_and_run_next, TaskStatus,
@@ -90,16 +90,30 @@ pub fn sys_task_info(ti: *mut TaskInfo) -> isize {
     0
 }
 
+/// Align up to PAGE_SIZE
+fn align_up_pagesize(x: usize) -> usize {
+    (x + PAGE_SIZE - 1) & !(PAGE_SIZE - 1)
+}
+
 // YOUR JOB: Implement mmap.
-pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
+pub fn sys_mmap(start: usize, len: usize, port: usize) -> isize {
     trace!("kernel: sys_mmap NOT IMPLEMENTED YET!");
-    -1
+    let va = VirtAddr(start);
+    if !va.aligned() {
+        return -1;
+    }
+    if port & !0x7 != 0 || port & 0x7 == 0 {
+        return -1;
+    }
+    let _len = align_up_pagesize(len) as isize;
+
+    0
 }
 
 // YOUR JOB: Implement munmap.
 pub fn sys_munmap(_start: usize, _len: usize) -> isize {
     trace!("kernel: sys_munmap NOT IMPLEMENTED YET!");
-    -1
+    0
 }
 /// change data segment size
 pub fn sys_sbrk(size: i32) -> isize {
