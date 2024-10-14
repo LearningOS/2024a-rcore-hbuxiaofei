@@ -21,7 +21,9 @@ mod switch;
 #[allow(clippy::module_inception)]
 mod task;
 
+use crate::config::MAX_SYSCALL_NUM;
 use crate::loader::get_app_data_by_name;
+use crate::mm::{MapPermission, VirtAddr};
 use alloc::sync::Arc;
 use lazy_static::*;
 pub use manager::{fetch_task, TaskManager};
@@ -99,6 +101,44 @@ pub fn exit_current_and_run_next(exit_code: i32) {
     // we do not have to save task context
     let mut _unused = TaskContext::zero_init();
     schedule(&mut _unused as *mut _);
+}
+
+/// Increase syscall times of current task.
+pub fn inc_current_syscall_times(syscall_id: usize) {
+    if let Some(task) = current_task() {
+        let mut task_inner = task.inner_exclusive_access();
+        if syscall_id < MAX_SYSCALL_NUM {
+            task_inner.counter[syscall_id] += 1;
+        }
+    }
+}
+
+/// Get syscall times of current task.
+pub fn get_current_syscall_times(syscall_id: usize) -> u32 {
+    let task = current_task().unwrap();
+    let task_inner = task.inner_exclusive_access();
+    task_inner.counter[syscall_id]
+}
+
+/// Map memory for current task
+pub fn map_current(start_va: VirtAddr, end_va: VirtAddr, permission: MapPermission) -> isize {
+    let task = current_task().unwrap();
+    let mut task_inner = task.inner_exclusive_access();
+
+    if task_inner.memory_set.check_is_overlap(start_va, end_va) {
+        return -1;
+    }
+    task_inner
+        .memory_set
+        .insert_framed_area(start_va, end_va, permission);
+    0
+}
+
+/// Unmap memory for current task
+pub fn unmap_current(start_va: VirtAddr, end_va: VirtAddr) -> isize {
+    let task = current_task().unwrap();
+    let mut task_inner = task.inner_exclusive_access();
+    task_inner.memory_set.remove_framed_area(start_va, end_va)
 }
 
 lazy_static! {
