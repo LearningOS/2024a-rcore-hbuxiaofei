@@ -5,11 +5,16 @@ use alloc::sync::Arc;
 use crate::{
     config::MAX_SYSCALL_NUM,
     fs::{open_file, OpenFlags},
+    config::PAGE_SIZE,
+    loader::get_app_data_by_name,
+    mm::{translated_byte_buffer, MapPermission, VirtAddr},
     mm::{translated_refmut, translated_str},
     task::{
         add_task, current_task, current_user_token, exit_current_and_run_next,
         suspend_current_and_run_next, TaskStatus,
     },
+    task::{get_current_syscall_times, map_current, unmap_current},
+    timer::{get_time_ms, get_time_us},
 };
 
 #[repr(C)]
@@ -114,44 +119,117 @@ pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> isize {
     // ---- release current PCB automatically
 }
 
+/// Copy memory from kernel space to user space
+fn copy_to_user(dst: *mut u8, src: *const u8, len: usize) {
+    let s: &[u8] = unsafe { core::slice::from_raw_parts(src, len) };
+    let buffers = translated_byte_buffer(current_user_token(), dst, len);
+    let mut start = 0;
+    for buffer in buffers {
+        let end = start + buffer.len();
+        buffer.copy_from_slice(&s[start..end]);
+        start = end;
+    }
+}
+
 /// YOUR JOB: get time with second and microsecond
 /// HINT: You might reimplement it with virtual memory management.
 /// HINT: What if [`TimeVal`] is splitted by two pages ?
-pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
+pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
     trace!(
         "kernel:pid[{}] sys_get_time NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    -1
+    let us = get_time_us();
+    let tv = TimeVal {
+        sec: us / 1_000_000,
+        usec: us % 1_000_000,
+    };
+    let len = core::mem::size_of::<TimeVal>();
+    let s: &[u8] = unsafe { core::slice::from_raw_parts(&tv as *const TimeVal as *const u8, len) };
+    copy_to_user(ts as *mut u8, s.as_ptr(), len);
+    0
 }
 
 /// YOUR JOB: Finish sys_task_info to pass testcases
 /// HINT: You might reimplement it with virtual memory management.
 /// HINT: What if [`TaskInfo`] is splitted by two pages ?
-pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
+pub fn sys_task_info(ti: *mut TaskInfo) -> isize {
     trace!(
         "kernel:pid[{}] sys_task_info NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    -1
+    let cur_time = get_time_ms();
+    let mut syscall_times = [0; MAX_SYSCALL_NUM];
+    for i in 0..syscall_times.len() {
+        syscall_times[i] = get_current_syscall_times(i);
+    }
+
+    let task = current_task().unwrap();
+    let task_inner = task.inner_exclusive_access();
+
+    let info = TaskInfo {
+        status: task_inner.task_status,
+        syscall_times,
+        time: if cur_time > task_inner.start_time {
+            cur_time - task_inner.start_time
+        } else {
+            0
+        },
+    };
+    let len = core::mem::size_of::<TaskInfo>();
+    let s: &[u8] =
+        unsafe { core::slice::from_raw_parts(&info as *const TaskInfo as *const u8, len) };
+    copy_to_user(ti as *mut u8, s.as_ptr(), len);
+    0
+}
+
+/// Align up to PAGE_SIZE
+fn align_up_pagesize(x: usize) -> usize {
+    (x + PAGE_SIZE - 1) & !(PAGE_SIZE - 1)
 }
 
 /// YOUR JOB: Implement mmap.
-pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
+pub fn sys_mmap(start: usize, len: usize, port: usize) -> isize {
     trace!(
         "kernel:pid[{}] sys_mmap NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    -1
+    let start_va = VirtAddr(start);
+    if !start_va.aligned() {
+        return -1;
+    }
+    if port & !0x7 != 0 || port & 0x7 == 0 {
+        return -1;
+    }
+
+    let end_va = VirtAddr(start + align_up_pagesize(len));
+
+    let mut permission = MapPermission::U;
+    if port & (0x01 << 0) != 0 {
+        permission |= MapPermission::R;
+    }
+    if port & (0x01 << 1) != 0 {
+        permission |= MapPermission::W;
+    }
+    if port & (0x01 << 2) != 0 {
+        permission |= MapPermission::X;
+    }
+
+    map_current(start_va, end_va, permission)
 }
 
 /// YOUR JOB: Implement munmap.
-pub fn sys_munmap(_start: usize, _len: usize) -> isize {
+pub fn sys_munmap(start: usize, len: usize) -> isize {
     trace!(
         "kernel:pid[{}] sys_munmap NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    -1
+    let start_va = VirtAddr(start);
+    if !start_va.aligned() {
+        return -1;
+    }
+    let end_va = VirtAddr(start + align_up_pagesize(len));
+    unmap_current(start_va, end_va)
 }
 
 /// change data segment size
