@@ -63,6 +63,36 @@ impl MemorySet {
             None,
         );
     }
+
+    /// Unmap memset.
+    pub fn umap(&mut self, start_va: VirtAddr, end_va: VirtAddr) {
+        if let Some(pos) = self
+            .areas
+            .iter()
+            .position(|x| x.get_vpn_range() == (start_va.floor(), end_va.ceil()))
+        {
+            self.areas[pos].unmap(&mut self.page_table);
+            self.areas.remove(pos);
+        }
+    }
+
+    /// Check memset overlap.
+    pub fn check_is_overlap(&self, start_va: VirtAddr, end_va: VirtAddr) -> bool {
+        let is_overlap = |arr1: (usize, usize), arr2: (usize, usize)| -> bool {
+            !(arr1.1 <= arr2.0 || arr1.0 >= arr2.1)
+        };
+        let start_va = usize::from(start_va.floor());
+        let end_va = usize::from(end_va.ceil());
+        for area in self.areas.iter() {
+            let vpn_start = usize::from(area.vpn_range.get_start());
+            let vpn_end = usize::from(area.vpn_range.get_end());
+            if is_overlap((start_va, end_va), (vpn_start, vpn_end)) {
+                return true;
+            }
+        }
+        false
+    }
+
     fn push(&mut self, mut map_area: MapArea, data: Option<&[u8]>) {
         map_area.map(&mut self.page_table);
         if let Some(data) = data {
@@ -287,6 +317,13 @@ impl MapArea {
             map_perm,
         }
     }
+
+    pub fn get_vpn_range(&self) -> (VirtPageNum, VirtPageNum) {
+        let left = self.vpn_range.get_start();
+        let right = self.vpn_range.get_end();
+        (left, right)
+    }
+
     pub fn map_one(&mut self, page_table: &mut PageTable, vpn: VirtPageNum) {
         let ppn: PhysPageNum;
         match self.map_type {

@@ -1,10 +1,12 @@
 //! Process management syscalls
+
 use crate::{
     config::{MAX_SYSCALL_NUM, PAGE_SIZE},
-    mm::{translated_byte_buffer, VirtAddr, MapPermission},
+    mm::{translated_byte_buffer, MapPermission, VirtAddr},
     task::{
         change_program_brk, current_user_token, exit_current_and_run_next, get_current_status,
-        get_current_syscall_times, get_current_time, suspend_current_and_run_next, map_current, TaskStatus,
+        get_current_syscall_times, get_current_time, map_check_ok, map_current,
+        suspend_current_and_run_next, unmap_current, TaskStatus,
     },
     timer::get_time_us,
 };
@@ -105,10 +107,23 @@ pub fn sys_mmap(start: usize, len: usize, port: usize) -> isize {
     if port & !0x7 != 0 || port & 0x7 == 0 {
         return -1;
     }
+
     let end_va = VirtAddr(start + align_up_pagesize(len));
 
+    if !map_check_ok(start_va, end_va) {
+        return -1;
+    }
 
-    let permission = MapPermission::R | MapPermission::W;
+    let mut permission = MapPermission::U;
+    if port & (0x01 << 0) != 0 {
+        permission |= MapPermission::R;
+    }
+    if port & (0x01 << 1) != 0 {
+        permission |= MapPermission::W;
+    }
+    if port & (0x01 << 2) != 0 {
+        permission |= MapPermission::X;
+    }
 
     map_current(start_va, end_va, permission);
 
@@ -116,8 +131,14 @@ pub fn sys_mmap(start: usize, len: usize, port: usize) -> isize {
 }
 
 // YOUR JOB: Implement munmap.
-pub fn sys_munmap(_start: usize, _len: usize) -> isize {
+pub fn sys_munmap(start: usize, len: usize) -> isize {
     trace!("kernel: sys_munmap NOT IMPLEMENTED YET!");
+    let start_va = VirtAddr(start);
+    if !start_va.aligned() {
+        return -1;
+    }
+    let end_va = VirtAddr(start + align_up_pagesize(len));
+    unmap_current(start_va, end_va);
     0
 }
 /// change data segment size

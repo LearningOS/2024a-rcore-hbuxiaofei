@@ -16,10 +16,10 @@ mod task;
 
 use crate::config::MAX_SYSCALL_NUM;
 use crate::loader::{get_app_data, get_num_app};
+use crate::mm::{MapPermission, VirtAddr};
 use crate::sync::UPSafeCell;
 use crate::timer::get_time_ms;
 use crate::trap::TrapContext;
-use crate::mm::{VirtAddr, MapPermission};
 use alloc::vec::Vec;
 use lazy_static::*;
 use switch::__switch;
@@ -192,10 +192,30 @@ impl TaskManager {
         get_time_ms() - inner.tasks[current].start_time
     }
 
+    fn map_check_ok(&self, start_va: VirtAddr, end_va: VirtAddr) -> bool {
+        let inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        if inner.tasks[current]
+            .memory_set
+            .check_is_overlap(start_va, end_va)
+        {
+            return false;
+        }
+        true
+    }
+
     fn map_current(&self, start_va: VirtAddr, end_va: VirtAddr, permission: MapPermission) {
         let mut inner = self.inner.exclusive_access();
         let current = inner.current_task;
-        inner.tasks[current].memory_set.insert_framed_area(start_va, end_va, permission)
+        inner.tasks[current]
+            .memory_set
+            .insert_framed_area(start_va, end_va, permission)
+    }
+
+    fn unmap_current(&self, start_va: VirtAddr, end_va: VirtAddr) {
+        let mut inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        inner.tasks[current].memory_set.umap(start_va, end_va)
     }
 }
 
@@ -267,7 +287,17 @@ pub fn get_current_time() -> usize {
     TASK_MANAGER.get_current_time()
 }
 
+/// Check map memory for current task
+pub fn map_check_ok(start_va: VirtAddr, end_va: VirtAddr) -> bool {
+    return TASK_MANAGER.map_check_ok(start_va, end_va);
+}
+
 /// Map memory for current task
 pub fn map_current(start_va: VirtAddr, end_va: VirtAddr, permission: MapPermission) {
     TASK_MANAGER.map_current(start_va, end_va, permission)
+}
+
+/// Unmap memory for current task
+pub fn unmap_current(start_va: VirtAddr, end_va: VirtAddr) {
+    TASK_MANAGER.unmap_current(start_va, end_va)
 }
