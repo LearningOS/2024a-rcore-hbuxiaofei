@@ -212,7 +212,7 @@ impl TaskManager {
             .insert_framed_area(start_va, end_va, permission)
     }
 
-    fn unmap_current(&self, start_va: VirtAddr, end_va: VirtAddr) {
+    fn unmap_current(&self, start_va: VirtAddr, end_va: VirtAddr) -> isize {
         let mut inner = self.inner.exclusive_access();
         let current = inner.current_task;
         inner.tasks[current].memory_set.umap(start_va, end_va)
@@ -298,6 +298,6 @@ pub fn map_current(start_va: VirtAddr, end_va: VirtAddr, permission: MapPermissi
 }
 
 /// Unmap memory for current task
-pub fn unmap_current(start_va: VirtAddr, end_va: VirtAddr) {
+pub fn unmap_current(start_va: VirtAddr, end_va: VirtAddr) -> isize {
     TASK_MANAGER.unmap_current(start_va, end_va)
 }

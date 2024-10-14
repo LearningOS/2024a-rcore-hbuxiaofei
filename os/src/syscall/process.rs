@@ -138,8 +138,7 @@ pub fn sys_munmap(start: usize, len: usize) -> isize {
         return -1;
     }
     let end_va = VirtAddr(start + align_up_pagesize(len));
-    unmap_current(start_va, end_va);
-    0
+    unmap_current(start_va, end_va)
 }
 /// change data segment size
 pub fn sys_sbrk(size: i32) -> isize {

@@ -65,7 +65,7 @@ impl MemorySet {
     }
 
     /// Unmap memset.
-    pub fn umap(&mut self, start_va: VirtAddr, end_va: VirtAddr) {
+    pub fn umap(&mut self, start_va: VirtAddr, end_va: VirtAddr) -> isize {
         if let Some(pos) = self
             .areas
             .iter()
@@ -73,7 +73,9 @@ impl MemorySet {
         {
             self.areas[pos].unmap(&mut self.page_table);
             self.areas.remove(pos);
+            return 0;
         }
+        -1
     }
 
     /// Check memset overlap.
