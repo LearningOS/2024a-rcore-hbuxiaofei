@@ -11,7 +11,7 @@ use crate::{
         add_task, current_task, current_user_token, exit_current_and_run_next,
         suspend_current_and_run_next, TaskStatus,
     },
-    task::{get_current_syscall_times, map_current, unmap_current},
+    task::{get_current_syscall_times, map_current, unmap_current, TaskControlBlock},
     timer::{get_time_ms, get_time_us},
 };
 
@@ -134,6 +134,19 @@ fn copy_to_user(dst: *mut u8, src: *const u8, len: usize) {
     }
 }
 
+/// Copy memory from user space to kernel space
+#[allow(dead_code)]
+fn copy_from_user(dst: *mut u8, src: *const u8, len: usize) {
+    let s: &mut [u8] = unsafe { core::slice::from_raw_parts_mut(dst, len) };
+    let buffers = translated_byte_buffer(current_user_token(), src, len);
+    let mut start = 0;
+    for buffer in buffers {
+        let end = start + buffer.len();
+        s.copy_from_slice(&buffer[start..end]);
+        start = end;
+    }
+}
+
 /// YOUR JOB: get time with second and microsecond
 /// HINT: You might reimplement it with virtual memory management.
 /// HINT: What if [`TimeVal`] is splitted by two pages ?
@@ -247,12 +260,28 @@ pub fn sys_sbrk(size: i32) -> isize {
 
 /// YOUR JOB: Implement spawn.
 /// HINT: fork + exec =/= spawn
-pub fn sys_spawn(_path: *const u8) -> isize {
+pub fn sys_spawn(path: *const u8) -> isize {
     trace!(
         "kernel:pid[{}] sys_spawn NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    -1
+
+    let path = {
+        let token = current_user_token();
+        translated_str(token, path)
+    };
+    if let Some(data) = get_app_data_by_name(path.as_str()) {
+        let task = current_task().unwrap();
+        let mut task_inner = task.inner_exclusive_access();
+        let child = Arc::new(TaskControlBlock::new(data));
+        let new_pid = child.pid.0;
+        task_inner.children.push(child.clone());
+        add_task(child);
+
+        new_pid as isize
+    } else {
+        -1
+    }
 }
 
 // YOUR JOB: Set task priority.
