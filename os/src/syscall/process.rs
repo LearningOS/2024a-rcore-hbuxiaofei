@@ -6,7 +6,6 @@ use crate::{
     config::MAX_SYSCALL_NUM,
     fs::{open_file, OpenFlags},
     config::PAGE_SIZE,
-    loader::get_app_data_by_name,
     mm::{translated_byte_buffer, MapPermission, VirtAddr},
     mm::{translated_refmut, translated_str},
     task::{
@@ -262,15 +261,15 @@ pub fn sys_spawn(path: *const u8) -> isize {
         "kernel:pid[{}] sys_spawn NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-
     let path = {
         let token = current_user_token();
         translated_str(token, path)
     };
-    if let Some(data) = get_app_data_by_name(path.as_str()) {
+    if let Some(app_inode) = open_file(path.as_str(), OpenFlags::RDONLY) {
+        let data = app_inode.read_all();
         let task = current_task().unwrap();
         let mut task_inner = task.inner_exclusive_access();
-        let child = Arc::new(TaskControlBlock::new(data));
+        let child = Arc::new(TaskControlBlock::new(data.as_slice()));
         let new_pid = child.pid.0;
         task_inner.children.push(child.clone());
         add_task(child);
