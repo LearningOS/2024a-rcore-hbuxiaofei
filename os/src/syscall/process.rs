@@ -271,8 +271,10 @@ pub fn sys_spawn(path: *const u8) -> isize {
         let mut task_inner = task.inner_exclusive_access();
         let child = Arc::new(TaskControlBlock::new(data.as_slice()));
         let new_pid = child.pid.0;
+        let mut child_inner = child.inner_exclusive_access();
+        child_inner.parent = Some(Arc::downgrade(&task));
         task_inner.children.push(child.clone());
-        add_task(child);
+        add_task(child.clone());
 
         new_pid as isize
     } else {
