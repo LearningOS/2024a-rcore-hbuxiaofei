@@ -74,6 +74,32 @@ impl Inode {
             .lock()
             .modify(self.block_offset, f)
     }
+
+    fn remove_inode(&self, name: &str, disk_inode: &mut DiskInode) -> isize {
+        assert!(disk_inode.is_dir());
+        let file_count = (disk_inode.size as usize) / DIRENT_SZ;
+        let mut dirent = DirEntry::empty();
+        let mut found = false;
+        for i in 0..file_count {
+            disk_inode.read_at(DIRENT_SZ * i, dirent.as_bytes_mut(), &self.block_device);
+            if found {
+                disk_inode.write_at(DIRENT_SZ * (i - 1), dirent.as_bytes(), &self.block_device);
+            }
+            if !found && dirent.name() == name {
+                found = true;
+                if let Some(inode_count) = self.find_inode_count(dirent.inode_id() , disk_inode) {
+                    if inode_count == 1 {
+                        self.clear();
+                    }
+                }
+                let new_size = (file_count - 1) * DIRENT_SZ;
+                let mut fs = self.fs.lock();
+                self.increase_size(new_size as u32, disk_inode, &mut fs);
+            }
+        }
+        0
+    }
+
     /// Find inode under a disk inode by name
     fn find_inode_id(&self, name: &str, disk_inode: &DiskInode) -> Option<u32> {
         // assert it is a directory
@@ -156,6 +182,12 @@ impl Inode {
             v.push(fs.alloc_data());
         }
         disk_inode.increase_size(new_size, v, &self.block_device);
+    }
+    /// Unlink inode
+    pub fn unlink(&self, name: &str) -> isize {
+        self.modify_disk_inode(|disk_inode| {
+            self.remove_inode(name, disk_inode)
+        })
     }
     /// Link inode
     pub fn link(&self, old_name: &str, new_name: &str) -> Option<Arc<Inode>> {
