@@ -125,6 +125,17 @@ pub fn open_file(name: &str, flags: OpenFlags) -> Option<Arc<OSInode>> {
     }
 }
 
+/// Link a old file to new file
+pub fn link_file(old_name: &str, new_name: &str) -> Option<Arc<OSInode>> {
+    if ROOT_INODE.find(old_name).is_some() {
+        return ROOT_INODE
+            .link(old_name, new_name)
+            .map(|inode| Arc::new(OSInode::new(false, false, inode)));
+    }
+
+    None
+}
+
 impl File for OSInode {
     fn readable(&self) -> bool {
         self.readable
@@ -167,7 +178,7 @@ impl File for OSInode {
         } else {
             StatMode::FILE
         };
-        st.nlink = 0;
+        st.nlink = inode.get_nlink(st.ino);
         st.pad = [0; 7];
         0
     }
