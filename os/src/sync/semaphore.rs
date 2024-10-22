@@ -41,6 +41,16 @@ impl Semaphore {
         }
     }
 
+    /// down check operation of semaphore
+    pub fn down_try(&self) -> bool {
+        let inner = self.inner.exclusive_access();
+        if inner.count >= 1 {
+            true
+        } else {
+            false
+        }
+    }
+
     /// down operation of semaphore
     pub fn down(&self) {
         trace!("kernel: Semaphore::down");

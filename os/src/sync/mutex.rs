@@ -8,6 +8,8 @@ use alloc::{collections::VecDeque, sync::Arc};
 
 /// Mutex trait
 pub trait Mutex: Sync + Send {
+    /// Try lock the mutex
+    fn lock_try(&self) -> bool;
     /// Lock the mutex
     fn lock(&self);
     /// Unlock the mutex
@@ -29,6 +31,15 @@ impl MutexSpin {
 }
 
 impl Mutex for MutexSpin {
+    /// Try lock the spinlock mutex
+    fn lock_try(&self) -> bool {
+        let locked = self.locked.exclusive_access();
+        if *locked {
+            false
+        } else {
+            true
+        }
+    }
     /// Lock the spinlock mutex
     fn lock(&self) {
         trace!("kernel: MutexSpin::lock");
@@ -78,6 +89,15 @@ impl MutexBlocking {
 }
 
 impl Mutex for MutexBlocking {
+    /// Try lock the Blocking mutex
+    fn lock_try(&self) -> bool {
+        let mutex_inner = self.inner.exclusive_access();
+        if mutex_inner.locked {
+            false
+        } else {
+            true
+        }
+    }
     /// lock the blocking mutex
     fn lock(&self) {
         trace!("kernel: MutexBlocking::lock");
