@@ -41,14 +41,10 @@ impl Semaphore {
         }
     }
 
-    /// down check operation of semaphore
-    pub fn down_try(&self) -> bool {
+    /// get count of semaphore
+    pub fn get_count(&self) -> isize {
         let inner = self.inner.exclusive_access();
-        if inner.count >= 1 {
-            true
-        } else {
-            false
-        }
+        inner.count
     }
 
     /// down operation of semaphore

@@ -153,6 +153,58 @@ pub fn sys_semaphore_up(sem_id: usize) -> isize {
     sem.up();
     0
 }
+
+fn sem_try_down(count: isize) -> bool {
+    let tid = {
+        current_task()
+            .unwrap()
+            .inner_exclusive_access()
+            .res
+            .as_ref()
+            .unwrap()
+            .tid
+    };
+
+    let is_deadlock = {
+        let mut tmp_deadlock = true;
+        let process = current_process();
+        let process_inner = process.inner_exclusive_access();
+
+        warn!(">>> task count: {}", process_inner.tasks.len());
+
+        for i in 0..process_inner.tasks.len() {
+            let (cur_tid, finish) =  {
+                let t = &process_inner.tasks[i];
+                let t_inner = t.as_ref().unwrap().inner_exclusive_access();
+                (t_inner.res.as_ref().unwrap().tid, t_inner.finish)
+            };
+
+            warn!(">>>>>> task {} - {}: {}", cur_tid, tid, finish);
+
+           if cur_tid != tid {
+                if finish == false {
+                    tmp_deadlock = false;
+                    break;
+                }
+            }
+        }
+        tmp_deadlock
+    };
+
+    let task = current_task();
+    let task_inner = task.unwrap();
+    if count <= 0 {
+        if is_deadlock {
+            return false;
+        }
+        task_inner.set_finish();
+    } else {
+        task_inner.clear_finish();
+    }
+
+    true
+}
+
 /// semaphore down syscall
 pub fn sys_semaphore_down(sem_id: usize) -> isize {
     trace!(
@@ -171,9 +223,11 @@ pub fn sys_semaphore_down(sem_id: usize) -> isize {
     let sem = Arc::clone(process_inner.semaphore_list[sem_id].as_ref().unwrap());
     let enable_dld = process_inner.enable_dld;
     drop(process_inner);
-    if enable_dld && !sem.down_try() {
+
+    if enable_dld && !sem_try_down(sem.get_count()) {
         return -0xDEAD;
     }
+
     sem.down();
     0
 }

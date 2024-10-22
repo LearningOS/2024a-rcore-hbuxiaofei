@@ -28,6 +28,16 @@ impl TaskControlBlock {
         let inner = process.inner_exclusive_access();
         inner.memory_set.token()
     }
+    /// Set finish
+    pub fn set_finish(&self) {
+        let mut inner = self.inner.exclusive_access();
+        inner.finish = true;
+    }
+    /// Clear finish
+    pub fn clear_finish(&self) {
+        let mut inner = self.inner.exclusive_access();
+        inner.finish = false;
+    }
 }
 
 pub struct TaskControlBlockInner {
@@ -42,8 +52,11 @@ pub struct TaskControlBlockInner {
     /// It is set when active exit or execution error occurs
     pub exit_code: Option<i32>,
 
-    /// Start timt e
+    /// Start time
     pub start_time: usize,
+
+    /// Finish status
+    pub finish: bool,
 }
 
 impl TaskControlBlockInner {
@@ -79,6 +92,7 @@ impl TaskControlBlock {
                     task_status: TaskStatus::Ready,
                     exit_code: None,
                     start_time: 0,
+                    finish: false,
                 })
             },
         }
