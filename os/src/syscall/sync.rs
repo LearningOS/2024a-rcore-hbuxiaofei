@@ -2,6 +2,7 @@ use crate::sync::{Condvar, Mutex, MutexBlocking, MutexSpin, Semaphore};
 use crate::task::{block_current_and_run_next, current_process, current_task};
 use crate::timer::{add_timer, get_time_ms};
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 /// sleep syscall
 pub fn sys_sleep(ms: usize) -> isize {
     trace!(
@@ -131,6 +132,16 @@ pub fn sys_semaphore_create(res_count: usize) -> isize {
             .push(Some(Arc::new(Semaphore::new(res_count))));
         process_inner.semaphore_list.len() - 1
     };
+
+    if process_inner.sem_available.len() < id + 1 {
+        process_inner.sem_available.resize(id + 1, 0);
+    }
+    process_inner.sem_available[id] = res_count as isize;
+    if process_inner.sem_work.len() < id + 1 {
+        process_inner.sem_work.resize(id + 1, 0);
+    }
+    process_inner.sem_work[id] = res_count as isize;
+
     id as isize
 }
 /// semaphore up syscall
@@ -146,15 +157,6 @@ pub fn sys_semaphore_up(sem_id: usize) -> isize {
             .unwrap()
             .tid
     );
-    let process = current_process();
-    let process_inner = process.inner_exclusive_access();
-    let sem = Arc::clone(process_inner.semaphore_list[sem_id].as_ref().unwrap());
-    drop(process_inner);
-    sem.up();
-    0
-}
-
-fn sem_try_down(count: isize) -> bool {
     let tid = {
         current_task()
             .unwrap()
@@ -164,43 +166,42 @@ fn sem_try_down(count: isize) -> bool {
             .unwrap()
             .tid
     };
+    let process = current_process();
+    let process_inner = process.inner_exclusive_access();
+    let sem = Arc::clone(process_inner.semaphore_list[sem_id].as_ref().unwrap());
+    drop(process_inner);
+    sem.up();
+    let nr_need = sem.get_need(tid);
 
-    let is_deadlock = {
-        let mut tmp_deadlock = true;
-        let process = current_process();
-        let process_inner = process.inner_exclusive_access();
+    let process = current_process();
+    let mut process_inner = process.inner_exclusive_access();
+    process_inner.sem_allocation[tid][sem_id] -= 1;
+    process_inner.sem_work[sem_id] += 1;
+    process_inner.sem_need[tid][sem_id] = nr_need;
 
-        warn!(">>> task count: {}", process_inner.tasks.len());
+    0
+}
 
-        for i in 0..process_inner.tasks.len() {
-            let (cur_tid, finish) =  {
-                let t = &process_inner.tasks[i];
-                let t_inner = t.as_ref().unwrap().inner_exclusive_access();
-                (t_inner.res.as_ref().unwrap().tid, t_inner.finish)
-            };
+fn sem_try_down(tid: usize, sem_id: usize) -> bool {
+    let process = current_process();
+    let process_inner = process.inner_exclusive_access();
 
-            warn!(">>>>>> task {} - {}: {}", cur_tid, tid, finish);
+    let finish = &process_inner.sem_finish;
+    let need = &process_inner.sem_need;
+    let work = &process_inner.sem_work;
 
-           if cur_tid != tid {
-                if finish == false {
-                    tmp_deadlock = false;
-                    break;
+    if finish.len() > tid && work.len() > sem_id {
+        if need.len() > tid && need[tid].len() > sem_id {
+            if finish[tid] == false && need[tid][sem_id] <= work[sem_id] {
+                for e in finish.iter() {
+                    if !e {
+                        return false;
+                    }
                 }
             }
         }
-        tmp_deadlock
-    };
-
-    let task = current_task();
-    let task_inner = task.unwrap();
-    if count <= 0 {
-        if is_deadlock {
-            return false;
-        }
-        task_inner.set_finish();
-    } else {
-        task_inner.clear_finish();
     }
+
 
     true
 }
@@ -218,17 +219,47 @@ pub fn sys_semaphore_down(sem_id: usize) -> isize {
             .unwrap()
             .tid
     );
+    let tid = {
+        current_task()
+            .unwrap()
+            .inner_exclusive_access()
+            .res
+            .as_ref()
+            .unwrap()
+            .tid
+    };
     let process = current_process();
     let process_inner = process.inner_exclusive_access();
     let sem = Arc::clone(process_inner.semaphore_list[sem_id].as_ref().unwrap());
     let enable_dld = process_inner.enable_dld;
+
     drop(process_inner);
 
-    if enable_dld && !sem_try_down(sem.get_count()) {
+    if enable_dld && !sem_try_down(tid, sem_id) {
         return -0xDEAD;
     }
 
     sem.down();
+    let nr_need = sem.get_need(tid);
+
+    let process = current_process();
+    let mut process_inner = process.inner_exclusive_access();
+    if process_inner.sem_allocation.len() < tid + 1 {
+        process_inner.sem_allocation.resize(tid + 1, Vec::new());
+    }
+    if process_inner.sem_allocation[tid].len() < sem_id + 1 {
+        process_inner.sem_allocation[tid].resize(sem_id + 1, 0);
+    }
+    if process_inner.sem_need.len() < tid + 1 {
+        process_inner.sem_need.resize(tid + 1, Vec::new());
+    }
+    if process_inner.sem_need[tid].len() < sem_id + 1 {
+        process_inner.sem_need[tid].resize(sem_id + 1, 0);
+    }
+    process_inner.sem_allocation[tid][sem_id] += 1;
+    process_inner.sem_work[sem_id] -= 1;
+    process_inner.sem_need[tid][sem_id] = nr_need;
+
     0
 }
 /// condvar create syscall

@@ -51,6 +51,16 @@ pub struct ProcessControlBlockInner {
     pub condvar_list: Vec<Option<Arc<Condvar>>>,
     /// deadlock detect enabled
     pub enable_dld: bool,
+    /// semaphore available
+    pub sem_available: Vec<isize>,
+    /// semaphore allocation
+    pub sem_allocation: Vec<Vec<isize>>,
+    /// semaphore need
+    pub sem_need: Vec<Vec<isize>>,
+    /// semaphore work
+    pub sem_work: Vec<isize>,
+    /// semaphore finish
+    pub sem_finish: Vec<bool>,
 }
 
 impl ProcessControlBlockInner {
@@ -122,6 +132,11 @@ impl ProcessControlBlock {
                     semaphore_list: Vec::new(),
                     condvar_list: Vec::new(),
                     enable_dld: false,
+                    sem_available: Vec::new(),
+                    sem_allocation: Vec::new(),
+                    sem_need: Vec::new(),
+                    sem_work: Vec::new(),
+                    sem_finish: Vec::new(),
                 })
             },
         });
@@ -165,7 +180,7 @@ impl ProcessControlBlock {
         // substitute memory_set
         trace!("kernel: exec .. substitute memory_set");
         self.inner_exclusive_access().memory_set = memory_set;
-        // then we alloc user resource for main thread again
+       // then we alloc user resource for main thread again
         // since memory_set has been changed
         trace!("kernel: exec .. alloc user resource for main thread again");
         let task = self.inner_exclusive_access().get_task(0);
@@ -249,6 +264,11 @@ impl ProcessControlBlock {
                     semaphore_list: Vec::new(),
                     condvar_list: Vec::new(),
                     enable_dld: false,
+                    sem_available: Vec::new(),
+                    sem_allocation: Vec::new(),
+                    sem_need: Vec::new(),
+                    sem_work: Vec::new(),
+                    sem_finish: Vec::new(),
                 })
             },
         });

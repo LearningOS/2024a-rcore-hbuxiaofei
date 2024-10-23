@@ -28,15 +28,11 @@ impl TaskControlBlock {
         let inner = process.inner_exclusive_access();
         inner.memory_set.token()
     }
-    /// Set finish
-    pub fn set_finish(&self) {
-        let mut inner = self.inner.exclusive_access();
-        inner.finish = true;
-    }
-    /// Clear finish
-    pub fn clear_finish(&self) {
-        let mut inner = self.inner.exclusive_access();
-        inner.finish = false;
+
+    /// Get tid
+    pub fn get_tid(&self) -> usize {
+        let inner = self.inner.exclusive_access();
+        inner.res.as_ref().unwrap().tid
     }
 }
 
@@ -54,9 +50,6 @@ pub struct TaskControlBlockInner {
 
     /// Start time
     pub start_time: usize,
-
-    /// Finish status
-    pub finish: bool,
 }
 
 impl TaskControlBlockInner {
@@ -92,7 +85,6 @@ impl TaskControlBlock {
                     task_status: TaskStatus::Ready,
                     exit_code: None,
                     start_time: 0,
-                    finish: false,
                 })
             },
         }

@@ -41,10 +41,22 @@ impl Semaphore {
         }
     }
 
-    /// get count of semaphore
-    pub fn get_count(&self) -> isize {
+     /// get count of semaphore
+    pub fn _get_count(&self) -> isize {
         let inner = self.inner.exclusive_access();
         inner.count
+    }
+
+    /// get need of semaphore fot the tid
+    pub fn get_need(&self, tid: usize) -> isize {
+        let inner = self.inner.exclusive_access();
+        let mut number = 0;
+        for e in inner.wait_queue.iter() {
+            if tid == e.get_tid() {
+                number += 1;
+            }
+        }
+        number
     }
 
     /// down operation of semaphore
