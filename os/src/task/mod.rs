@@ -84,22 +84,6 @@ pub fn exit_current_and_run_next(exit_code: i32) {
     // record exit code
     task_inner.exit_code = Some(exit_code);
     task_inner.res = None;
-
-    let mut process_inner = process.inner_exclusive_access();
-    process_inner.sem_finish[tid] = true;
-
-    for j in 0..process_inner.sem_available.len() {
-        if process_inner.sem_allocation.len() > tid {
-            if process_inner.sem_allocation[tid].len() > j && process_inner.sem_work.len() > j {
-                process_inner.sem_work[j] += process_inner.sem_allocation[tid][j];
-                process_inner.sem_allocation[tid][j] = 0;
-                process_inner.sem_need[tid][j] = 0;
-            }
-
-        }
-    }
-    drop(process_inner);
-
     // here we do not remove the thread since we are still using the kstack
     // it will be deallocated when sys_waittid is called
     drop(task_inner);

@@ -43,9 +43,6 @@ pub fn sys_thread_create(entry: usize, arg: usize) -> isize {
     tasks[new_task_tid] = Some(Arc::clone(&new_task));
 
     let finish = &mut process_inner.sem_finish;
-    if finish.len() == 0 {
-        finish.push(false);
-    }
     while finish.len() < new_task_tid + 1 {
         finish.push(true);
     }

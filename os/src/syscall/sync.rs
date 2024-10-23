@@ -175,6 +175,18 @@ pub fn sys_semaphore_up(sem_id: usize) -> isize {
 
     let process = current_process();
     let mut process_inner = process.inner_exclusive_access();
+    if process_inner.sem_allocation.len() < tid + 1 {
+        process_inner.sem_allocation.resize(tid + 1, Vec::new());
+    }
+    if process_inner.sem_allocation[tid].len() < sem_id + 1 {
+        process_inner.sem_allocation[tid].resize(sem_id + 1, 0);
+    }
+    if process_inner.sem_need.len() < tid + 1 {
+        process_inner.sem_need.resize(tid + 1, Vec::new());
+    }
+    if process_inner.sem_need[tid].len() < sem_id + 1 {
+        process_inner.sem_need[tid].resize(sem_id + 1, 0);
+    }
     process_inner.sem_allocation[tid][sem_id] -= 1;
     process_inner.sem_work[sem_id] += 1;
     process_inner.sem_need[tid][sem_id] = nr_need;
@@ -182,27 +194,39 @@ pub fn sys_semaphore_up(sem_id: usize) -> isize {
     0
 }
 
-fn sem_try_down(tid: usize, sem_id: usize) -> bool {
+fn sem_try_down(cur_tid: usize, sem_id: usize) -> bool {
     let process = current_process();
-    let process_inner = process.inner_exclusive_access();
+    let mut process_inner = process.inner_exclusive_access();
 
     let finish = &process_inner.sem_finish;
     let need = &process_inner.sem_need;
     let work = &process_inner.sem_work;
 
-    if finish.len() > tid && work.len() > sem_id {
-        if need.len() > tid && need[tid].len() > sem_id {
-            if finish[tid] == false && need[tid][sem_id] <= work[sem_id] {
-                for e in finish.iter() {
-                    if !e {
-                        return false;
+    let tasks = &process_inner.tasks;
+    for task in tasks.iter() {
+        if let Some(t) = task {
+            let tid = t.get_tid();
+            if tid.is_none() {
+                continue;
+            }
+            let tid = tid.unwrap();
+            if finish.len() > tid && work.len() > sem_id {
+                if need.len() > tid && need[tid].len() > sem_id {
+                    if finish[tid] == false && need[tid][sem_id] < work[sem_id] {
+                        return true;
                     }
                 }
             }
         }
     }
 
-
+    for e in finish.iter() {
+        if !e {
+            process_inner.sem_allocation[cur_tid][sem_id] -= 1;
+            process_inner.sem_work[sem_id] += 1;
+            return false;
+        }
+    }
     true
 }
 
@@ -229,21 +253,10 @@ pub fn sys_semaphore_down(sem_id: usize) -> isize {
             .tid
     };
     let process = current_process();
-    let process_inner = process.inner_exclusive_access();
+    let mut process_inner = process.inner_exclusive_access();
     let sem = Arc::clone(process_inner.semaphore_list[sem_id].as_ref().unwrap());
     let enable_dld = process_inner.enable_dld;
 
-    drop(process_inner);
-
-    if enable_dld && !sem_try_down(tid, sem_id) {
-        return -0xDEAD;
-    }
-
-    sem.down();
-    let nr_need = sem.get_need(tid);
-
-    let process = current_process();
-    let mut process_inner = process.inner_exclusive_access();
     if process_inner.sem_allocation.len() < tid + 1 {
         process_inner.sem_allocation.resize(tid + 1, Vec::new());
     }
@@ -258,7 +271,22 @@ pub fn sys_semaphore_down(sem_id: usize) -> isize {
     }
     process_inner.sem_allocation[tid][sem_id] += 1;
     process_inner.sem_work[sem_id] -= 1;
-    process_inner.sem_need[tid][sem_id] = nr_need;
+    process_inner.sem_need[tid][sem_id] = sem.get_need(tid);
+    if sem.get_count() <= 0 {
+        process_inner.sem_need[tid][sem_id] += 1;
+    }
+
+    drop(process_inner);
+
+    if enable_dld && !sem_try_down(tid, sem_id) {
+        return -0xDEAD;
+    }
+
+    sem.down();
+
+    let process = current_process();
+    let mut process_inner = process.inner_exclusive_access();
+    process_inner.sem_need[tid][sem_id] = sem.get_need(tid);
 
     0
 }

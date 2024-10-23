@@ -136,7 +136,7 @@ impl ProcessControlBlock {
                     sem_allocation: Vec::new(),
                     sem_need: Vec::new(),
                     sem_work: Vec::new(),
-                    sem_finish: Vec::new(),
+                    sem_finish: vec![false],
                 })
             },
         });
@@ -268,7 +268,7 @@ impl ProcessControlBlock {
                     sem_allocation: Vec::new(),
                     sem_need: Vec::new(),
                     sem_work: Vec::new(),
-                    sem_finish: Vec::new(),
+                    sem_finish: vec![false],
                 })
             },
         });

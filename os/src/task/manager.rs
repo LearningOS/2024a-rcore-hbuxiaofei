@@ -79,6 +79,26 @@ pub fn wakeup_task(task: Arc<TaskControlBlock>) {
 
 /// Remove a task from the ready queue
 pub fn remove_task(task: Arc<TaskControlBlock>) {
+    let task_inner = task.inner_exclusive_access();
+    let res = task_inner.res.as_ref();
+    if res.is_some() {
+        let tid = res.unwrap().tid;
+        let process = task.process.upgrade().unwrap();
+        let mut process_inner = process.inner_exclusive_access();
+        process_inner.sem_finish[tid] = true;
+        for j in 0..process_inner.sem_available.len() {
+            if process_inner.sem_allocation.len() > tid {
+                if process_inner.sem_allocation[tid].len() > j && process_inner.sem_work.len() > j {
+                    process_inner.sem_work[j] += process_inner.sem_allocation[tid][j];
+                    process_inner.sem_allocation[tid][j] = 0;
+                    process_inner.sem_need[tid][j] = 0;
+                }
+
+            }
+        }
+    }
+    drop(task_inner);
+
     //trace!("kernel: TaskManager::remove_task");
     TASK_MANAGER.exclusive_access().remove(task);
 }

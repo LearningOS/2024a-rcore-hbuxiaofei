@@ -30,9 +30,12 @@ impl TaskControlBlock {
     }
 
     /// Get tid
-    pub fn get_tid(&self) -> usize {
+    pub fn get_tid(&self) -> Option<usize> {
         let inner = self.inner.exclusive_access();
-        inner.res.as_ref().unwrap().tid
+        if inner.res.as_ref().is_some() {
+            return Some(inner.res.as_ref().unwrap().tid);
+        }
+        None
     }
 }
 

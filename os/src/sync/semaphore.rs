@@ -42,7 +42,7 @@ impl Semaphore {
     }
 
      /// get count of semaphore
-    pub fn _get_count(&self) -> isize {
+    pub fn get_count(&self) -> isize {
         let inner = self.inner.exclusive_access();
         inner.count
     }
@@ -52,7 +52,11 @@ impl Semaphore {
         let inner = self.inner.exclusive_access();
         let mut number = 0;
         for e in inner.wait_queue.iter() {
-            if tid == e.get_tid() {
+            let now_tid = e.get_tid();
+            if now_tid.is_none() {
+                continue;
+            }
+            if tid == now_tid.unwrap() {
                 number += 1;
             }
         }
