@@ -138,9 +138,14 @@ pub fn link_file(old_name: &str, new_name: &str) -> Option<Arc<OSInode>> {
 
 /// Unlink file
 pub fn unlink_file(name: &str) -> isize {
-    if ROOT_INODE.find(name).is_some() {
-        return ROOT_INODE
-            .unlink(name)
+    if let Some(inode) = ROOT_INODE.find(name) {
+        let count = ROOT_INODE .unlink(name);
+        if count == 0 {
+            inode.clear();
+        } else if count < 0 {
+            return count;
+        }
+        return 0;
     }
 
     -1
@@ -188,7 +193,8 @@ impl File for OSInode {
         } else {
             StatMode::FILE
         };
-        st.nlink = inode.get_nlink(st.ino);
+
+        st.nlink = ROOT_INODE.get_nlink(st.ino);
         st.pad = [0; 7];
         0
     }

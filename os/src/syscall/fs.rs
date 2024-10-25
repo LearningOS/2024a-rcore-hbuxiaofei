@@ -83,13 +83,13 @@ pub fn sys_fstat(fd: usize, st: *mut Stat) -> isize {
         "kernel:pid[{}] sys_fstat NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
+    let token = current_user_token();
     let task = current_task().unwrap();
     let inner = task.inner_exclusive_access();
     if fd >= inner.fd_table.len() {
         return -1;
     }
     if let Some(file) = &inner.fd_table[fd] {
-        let token = current_user_token();
         let st: &mut Stat = translated_refmut(token, st);
         return file.stat(st);
     }

@@ -80,24 +80,25 @@ impl Inode {
         let file_count = (disk_inode.size as usize) / DIRENT_SZ;
         let mut dirent = DirEntry::empty();
         let mut found = false;
+        let mut inode_id = 0;
         for i in 0..file_count {
             disk_inode.read_at(DIRENT_SZ * i, dirent.as_bytes_mut(), &self.block_device);
             if found {
                 disk_inode.write_at(DIRENT_SZ * (i - 1), dirent.as_bytes(), &self.block_device);
             }
+
             if !found && dirent.name() == name {
                 found = true;
-                if let Some(inode_count) = self.find_inode_count(dirent.inode_id() , disk_inode) {
-                    if inode_count == 1 {
-                        self.clear();
-                    }
-                }
-                let new_size = (file_count - 1) * DIRENT_SZ;
-                let mut fs = self.fs.lock();
-                self.increase_size(new_size as u32, disk_inode, &mut fs);
+                inode_id = dirent.inode_id();
+           }
+        }
+        if found {
+            disk_inode.size -= DIRENT_SZ as u32;
+            if let Some(inode_count) = self.find_inode_count(inode_id , disk_inode) {
+                return inode_count as isize;
             }
         }
-        0
+        -1
     }
 
     /// Find inode under a disk inode by name
