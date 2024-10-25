@@ -77,7 +77,7 @@ pub struct TaskControlBlockInner {
     pub program_brk: usize,
 
     /// Syscall counter
-    pub counter: [u32; MAX_SYSCALL_NUM],
+    pub counter: Vec<u32>,
 
     /// Start time
     pub start_time: usize,
@@ -151,7 +151,7 @@ impl TaskControlBlock {
                     ],
                     heap_bottom: user_sp,
                     program_brk: user_sp,
-                    counter: [0; MAX_SYSCALL_NUM],
+                    counter: vec![0; MAX_SYSCALL_NUM],
                     start_time: 0,
                     stride: 0,
                     priority: 16,
@@ -236,7 +236,7 @@ impl TaskControlBlock {
                     fd_table: new_fd_table,
                     heap_bottom: parent_inner.heap_bottom,
                     program_brk: parent_inner.program_brk,
-                    counter: [0; MAX_SYSCALL_NUM],
+                    counter: vec![0; MAX_SYSCALL_NUM],
                     start_time: 0,
                     stride: 0,
                     priority: 16,
